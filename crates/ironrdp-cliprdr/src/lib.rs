@@ -805,7 +805,21 @@ impl<R: Role> Cliprdr<R> {
         // because the remote rejected our clipboard and no further responses for
         // those requests will arrive.
 
-        let formats = format_list.get_formats(self.are_long_format_names_enabled())?;
+        let formats = match format_list.get_formats(self.are_long_format_names_enabled()) {
+            Ok(formats) => formats,
+            Err(error) => {
+                // [MS-RDPECLIP] 2.2.3.2 - CB_RESPONSE_FAIL: the Format List was not processed.
+                // One that can't be decoded, or holds more than MAX_FORMAT_COUNT formats or a name longer than
+                // MAX_FORMAT_NAME_LENGTH, leaves the remote clipboard with nothing to paste here.
+                // The channel goes on with the next copy.
+                warn!(%error, "Refusing the remote format list");
+                self.backend.on_remote_copy(&[]);
+
+                return Ok(vec![into_cliprdr_message(ClipboardPdu::FormatListResponse(
+                    FormatListResponse::Fail,
+                ))]);
+            }
+        };
 
         // Notify backend of available formats
         self.backend.on_remote_copy(&formats);

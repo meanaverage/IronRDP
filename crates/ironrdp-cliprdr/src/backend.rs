@@ -124,6 +124,9 @@ pub trait CliprdrBackend: AsAny + core::fmt::Debug + Send {
     ///
     /// Clipboard endpoint implementation should keep track of available formats prior
     /// to requesting data from the server.
+    ///
+    /// An empty list means the remote clipboard changed to nothing this side can take, as when its Format List is
+    /// refused.
     fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]);
 
     /// Processes remote's request to send format data.
