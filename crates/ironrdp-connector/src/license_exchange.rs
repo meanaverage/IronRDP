@@ -142,6 +142,7 @@ impl Sequence for LicenseExchangeSequence {
 
                 match license_pdu {
                     LicensePdu::ServerLicenseRequest(license_request) => {
+                        debug!(message = ?license_request, "Received");
                         let mut rng = rand::rng();
                         let mut client_random = [0u8; server_license::RANDOM_NUMBER_SIZE];
                         rng.fill_bytes(&mut client_random);
@@ -255,6 +256,7 @@ impl Sequence for LicenseExchangeSequence {
                                 ServerLicenseError::from(error_message)
                             ));
                         }
+                        debug!(message = ?error_message, "Received");
                         info!("Server did not initiate license exchange");
                         (Written::Nothing, LicenseExchangeState::LicenseExchanged)
                     }

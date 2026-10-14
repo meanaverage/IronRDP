@@ -157,3 +157,157 @@ fn read_license_header_handles_valid_client_correctly() {
         .into()
     );
 }
+
+#[test]
+fn debug_output_withholds_keying_material_and_licenses() {
+    use client_platform_challenge_response::{ClientType, LicenseDetailLevel};
+
+    // 0xab is 171 in the decimal list a derived Debug would print.
+    let bytes = |n: usize| vec![0xab; n];
+    let header = |preamble_message_type| LicenseHeader {
+        security_header: BasicSecurityHeader {
+            flags: BasicSecurityHeaderFlags::LICENSE_PKT,
+        },
+        preamble_message_type,
+        preamble_flags: PreambleFlags::empty(),
+        preamble_version: PreambleVersion::V3,
+        preamble_message_size: 0,
+    };
+    let license_request = |certificate| ServerLicenseRequest {
+        license_header: header(PreambleType::LicenseRequest),
+        server_random: bytes(32),
+        product_info: ProductInfo {
+            version: 0x0006_0000,
+            company_name: "Microsoft Corporation".to_owned(),
+            product_id: "A02".to_owned(),
+        },
+        server_certificate: Some(ServerCertificate {
+            issued_permanently: true,
+            certificate,
+        }),
+        scope_list: vec![Scope("microsoft.com".to_owned())],
+    };
+    let proprietary = cert::CertificateType::Proprietary(cert::ProprietaryCertificate {
+        public_key: cert::RsaPublicKey {
+            public_exponent: 0x0001_0001,
+            modulus: bytes(64),
+        },
+        signature: bytes(72),
+    });
+    let x509 = cert::CertificateType::X509(cert::X509CertificateChain {
+        certificate_array: vec![bytes(500), bytes(400)],
+    });
+
+    let printed = [
+        format!(
+            "{:?}",
+            LicenseEncryptionData {
+                premaster_secret: bytes(48),
+                mac_salt_key: bytes(16),
+                license_key: bytes(16),
+            }
+        ),
+        format!(
+            "{:?}",
+            ClientNewLicenseRequest {
+                license_header: header(PreambleType::NewLicenseRequest),
+                client_random: bytes(32),
+                encrypted_premaster_secret: bytes(64),
+                client_username: "someone".to_owned(),
+                client_machine_name: "WORKSTATION9".to_owned(),
+            }
+        ),
+        format!(
+            "{:?}",
+            ClientLicenseInfo {
+                license_header: header(PreambleType::LicenseInfo),
+                client_random: bytes(32),
+                encrypted_premaster_secret: bytes(64),
+                license_info: bytes(1000),
+                encrypted_hwid: bytes(20),
+                mac_data: bytes(16),
+            }
+        ),
+        format!(
+            "{:?}",
+            ClientPlatformChallengeResponse {
+                license_header: header(PreambleType::PlatformChallengeResponse),
+                encrypted_challenge_response_data: bytes(18),
+                encrypted_hwid: bytes(20),
+                mac_data: bytes(16),
+            }
+        ),
+        format!(
+            "{:?}",
+            PlatformChallengeResponseData {
+                client_type: ClientType::Other,
+                license_detail_level: LicenseDetailLevel::Detail,
+                challenge: bytes(10),
+            }
+        ),
+        format!(
+            "{:?}",
+            ClientHardwareIdentification {
+                platform_id: 0x0400_0000,
+                data: bytes(16),
+            }
+        ),
+        format!(
+            "{:?}",
+            ServerPlatformChallenge {
+                license_header: header(PreambleType::PlatformChallenge),
+                encrypted_platform_challenge: bytes(10),
+                mac_data: bytes(16),
+            }
+        ),
+        format!(
+            "{:?}",
+            ServerUpgradeLicense {
+                license_header: header(PreambleType::UpgradeLicense),
+                encrypted_license_info: bytes(1000),
+                mac_data: bytes(16),
+            }
+        ),
+        format!(
+            "{:?}",
+            LicenseInformation {
+                version: 0x0006_0000,
+                scope: "microsoft.com".to_owned(),
+                company_name: "Microsoft Corporation".to_owned(),
+                product_id: "A02".to_owned(),
+                license_info: bytes(1000),
+            }
+        ),
+        format!("{:?}", license_request(proprietary)),
+        format!("{:?}", license_request(x509)),
+    ];
+    for text in &printed {
+        assert!(!text.contains("171"), "{text}");
+        assert!(text.contains("bytes withheld>"), "{text}");
+    }
+    assert!(
+        printed[0].contains("premaster_secret: <48 bytes withheld>"),
+        "{}",
+        printed[0]
+    );
+    assert!(
+        !printed[1].contains("someone") && !printed[1].contains("WORKSTATION9"),
+        "{}",
+        printed[1]
+    );
+    assert!(
+        printed[1].contains("client_username: <7 characters withheld>"),
+        "{}",
+        printed[1]
+    );
+    // What tells the exchange apart stays: the header, the product and the scope.
+    assert!(
+        printed[7].contains("preamble_message_type: UpgradeLicense"),
+        "{}",
+        printed[7]
+    );
+    for text in &printed[8..] {
+        assert!(text.contains("\"A02\"") && text.contains("\"microsoft.com\""), "{text}");
+    }
+    assert!(printed[9].contains("public_exponent: 65537"), "{}", printed[9]);
+}
