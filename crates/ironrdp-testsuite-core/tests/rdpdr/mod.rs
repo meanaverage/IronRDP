@@ -389,7 +389,7 @@ fn printer_announce_respects_explicit_driver() {
 }
 
 #[test]
-fn filesystem_drive_announce_encodes_unicode_data_and_valid_dos_name() {
+fn filesystem_drive_announce_encodes_an_ascii_name_and_valid_dos_name() {
     let drive_name = "share \u{1F4C1}";
     let mut rdpdr = Rdpdr::new(Box::new(NoopRdpdrBackend), "IronRDP".to_owned())
         .with_drives(Some(vec![(42, drive_name.to_owned())]));
@@ -414,7 +414,13 @@ fn filesystem_drive_announce_encodes_unicode_data_and_valid_dos_name() {
     let device_data_length = read_u32_as_usize(&encoded[24..]);
     let device_data = &encoded[28..28 + device_data_length];
     assert_eq!(28 + device_data_length, encoded.len());
-    assert_eq!(utf16le_to_string(device_data), drive_name);
+    // oracle: reference FreeRDP/FreeRDP@dae0390a42ab271fa07a35979dfcd5671f83a949:channels/drive/client/drive_main.c -
+    // the name goes in DeviceData as 8-bit characters, null-terminated, with DRIVE_CAPABILITY_VERSION_02 advertised.
+    assert_eq!(&device_data[..5], b"share");
+    assert_eq!(device_data.last(), Some(&0));
+    // oracle: mutant the space dropped or replaced, or the character outside ASCII written as UTF-8 or UTF-16
+    // instead of '_'
+    assert_eq!(device_data, b"share _\0");
 }
 
 #[test]
