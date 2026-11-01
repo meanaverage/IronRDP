@@ -77,6 +77,19 @@ fn takes_a_short_format_list_at_the_limit() {
     assert_eq!(formats, list);
 }
 
+// oracle: property round-trip - an ANSI list that ends in a format with an empty name decodes to the formats it was
+// encoded from.
+#[test]
+fn keeps_a_last_format_with_an_empty_ansi_name() {
+    // An empty ANSI name is its one-byte terminator, so the last entry is 5 bytes: one short of a Unicode entry.
+    let list = [named(0xC001, "PNG"), unnamed(ClipboardFormatId::CF_DIB)];
+
+    assert_eq!(
+        FormatList::new_ascii(&list, true).unwrap().get_formats(true).unwrap(),
+        list
+    );
+}
+
 // oracle: mutant an ANSI name's terminator counted as two bytes, or an off-by-one in MAX_FORMAT_COUNT
 #[test]
 fn counts_empty_ansi_names_at_the_limit() {
@@ -132,14 +145,16 @@ fn refuses_an_unterminated_name_longer_than_the_limit(#[case] flags: u16, #[case
 }
 
 // oracle: mutant a name that ends with the PDU refused or cut short
-#[test]
-fn takes_an_unterminated_name_within_the_limit() {
+#[rstest]
+#[case::unicode(UNICODE_NAMES, b"P\0N\0G\0")]
+#[case::ansi(ASCII_NAMES, b"PNG")]
+fn takes_an_unterminated_name_within_the_limit(#[case] flags: u16, #[case] name: &[u8]) {
     // As before the limits: a name that ends with the PDU is read to its end.
     let mut body = 0xC001u32.to_le_bytes().to_vec();
-    body.extend_from_slice(b"P\0N\0G\0");
+    body.extend_from_slice(name);
 
     assert_eq!(
-        decode_long_names(&format_list_pdu(UNICODE_NAMES, &body)).unwrap(),
+        decode_long_names(&format_list_pdu(flags, &body)).unwrap(),
         [named(0xC001, "PNG")]
     );
 }
