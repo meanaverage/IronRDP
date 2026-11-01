@@ -510,7 +510,8 @@ fn refuses_a_server_copy_over_the_limit_before_the_server_answers_the_first_form
     assert_eq!(format_list_responses(&refusal), [FormatListResponse::Fail]);
     // oracle: mutant the backend not told that the remote clipboard holds nothing it can take
     assert_eq!(*copies.lock().unwrap(), [Vec::<ClipboardFormat>::new()]);
-    // oracle: mutant the client Ready once it refuses the server's list in Initialization
+    // oracle: spec MS-RDPECLIP §1.3.2.1 - the Initialization Sequence ends with the server's Format List Response,
+    // which the server's own copy is not.
     assert!(!client.is_ready());
     deliver(&mut server, refusal);
 
@@ -518,6 +519,7 @@ fn refuses_a_server_copy_over_the_limit_before_the_server_answers_the_first_form
     let answer = deliver(&mut server, first_copy);
     assert_eq!(format_list_responses(&answer), [FormatListResponse::Ok]);
     deliver(&mut client, answer);
+    // oracle: spec MS-RDPECLIP §1.3.2.1 - the Initialization Sequence ends with the server's Format List Response.
     assert!(client.is_ready());
     let list = [unnamed(ClipboardFormatId::CF_UNICODETEXT)];
     let answer = deliver(&mut client, server.initiate_copy(&list).unwrap());
