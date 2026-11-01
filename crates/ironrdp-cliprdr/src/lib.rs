@@ -444,8 +444,10 @@ pub struct Cliprdr<R: Role> {
 
     /// Whether the remote's last Format List Response was CB_RESPONSE_FAIL.
     ///
-    /// [MS-RDPECLIP] 3.1.5.2.4 - Format Data Requests are answered with failure while it stands, until the
-    /// remote accepts a Format List.
+    /// Format Data Requests are answered with failure while it stands, until the remote accepts a Format List,
+    /// per [MS-RDPECLIP 3.1.5.2.4, "Processing a Format List Response PDU"][3.1.5.2.4].
+    ///
+    /// [3.1.5.2.4]: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpeclip/1ac0265a-779b-481d-a95b-809f28d957dd
     local_format_list_refused: bool,
 
     /// Stores the local file list when initiating a file copy operation.
