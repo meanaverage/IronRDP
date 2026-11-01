@@ -412,7 +412,7 @@ fn printer_announce_respects_explicit_driver() {
 }
 
 #[test]
-fn filesystem_drive_announce_encodes_an_ascii_name_and_valid_dos_name() {
+fn filesystem_drive_announce_encodes_the_name_as_8_bit_characters_and_a_valid_dos_name() {
     let encoded = encoded_drive_announce("share \u{1F4C1}");
     assert_eq!(&encoded[..4], &[0x72, 0x44, 0x41, 0x44]); // RDPDR + DEVICELIST_ANNOUNCE
     assert_eq!(read_u32(&encoded[4..]), 1);
