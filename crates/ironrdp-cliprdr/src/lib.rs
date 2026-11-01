@@ -701,9 +701,12 @@ impl<R: Role> Cliprdr<R> {
     }
 
     fn handle_format_list_response(&mut self, response: FormatListResponse) -> PduResult<Vec<SvcMessage>> {
-        // [MS-RDPECLIP] 1.3.2.1 - Initialization Sequence: its last step is the server's Format List Response.
-        // On a failure, 3.1.5.2.4 asks only that later Format Data and File Contents Requests be answered with
-        // failure, so a client whose first Format List is refused still takes the server's copies.
+        // [MS-RDPECLIP] 1.3.2.1 - Initialization Sequence: its last step is the server's Format List Response,
+        // whether it accepts the list or not, so a client whose first Format List is refused still takes the
+        // server's copies.
+        // On a refusal, 3.1.5.2.4 asks that later Format Data and File Contents Requests be answered with failure.
+        // File Contents Requests without a locked clipDataId are, since the Fail arm below clears the local file list;
+        // Format Data Requests still reach the backend.
         if !R::is_server() && self.state == CliprdrState::Initialization {
             debug!("Clipboard virtual channel initialized");
             self.state = CliprdrState::Ready;
@@ -810,9 +813,11 @@ impl<R: Role> Cliprdr<R> {
             Ok(formats) => formats,
             Err(error) => {
                 // [MS-RDPECLIP] 2.2.3.2 - CB_RESPONSE_FAIL: the Format List was not processed.
-                // One that can't be decoded, or holds more than MAX_FORMAT_COUNT formats or a name longer than
-                // MAX_FORMAT_NAME_LENGTH, leaves the remote clipboard with nothing to paste here.
+                // One whose formats can't be decoded, or that holds more than MAX_FORMAT_COUNT formats or a name
+                // longer than MAX_FORMAT_NAME_LENGTH, leaves the remote clipboard with nothing to paste here.
                 // The channel goes on with the next copy.
+                // A list whose header can't be decoded never gets here: `process` returns that error, as 3.1.5.1
+                // has the connection dropped rather than answered.
                 warn!(%error, "Refusing the remote format list");
                 self.backend.on_remote_copy(&[]);
 

@@ -19,8 +19,11 @@ pub const MAX_FORMAT_COUNT: usize = 1024;
 /// Longest format name taken from a Format List PDU, in characters (UTF-16 code units, or bytes for ANSI names), not
 /// counting its null terminator.
 ///
-/// Windows keeps registered format names as atoms, at most 255 characters long; servers that name formats after
-/// MIME types use at most 255 as well (RFC 6838 4.2).
+/// Windows keeps registered format names as [string atoms], at most 255 characters long; servers that name formats
+/// after MIME types use at most 255 as well ([RFC 6838 4.2 Naming Requirements]).
+///
+/// [string atoms]: https://learn.microsoft.com/en-us/windows/win32/dataxchg/about-atom-tables#string-atoms
+/// [RFC 6838 4.2 Naming Requirements]: https://www.rfc-editor.org/rfc/rfc6838#section-4.2
 pub const MAX_FORMAT_NAME_LENGTH: usize = 1024;
 
 /// Clipboard format id.
@@ -335,10 +338,15 @@ impl FormatList<'_> {
         }
     }
 
+    /// Encodes `formats` with Unicode names.
+    ///
+    /// [`MAX_FORMAT_COUNT`] and [`MAX_FORMAT_NAME_LENGTH`] bound what [`Self::get_formats`] takes, not what is
+    /// sent: the peer applies its own limits.
     pub fn new_unicode(formats: &[ClipboardFormat], use_long_format: bool) -> EncodeResult<Self> {
         Self::new_impl(formats, use_long_format, false)
     }
 
+    /// As [`Self::new_unicode`], with ANSI names.
     pub fn new_ascii(formats: &[ClipboardFormat], use_long_format: bool) -> EncodeResult<Self> {
         Self::new_impl(formats, use_long_format, true)
     }
