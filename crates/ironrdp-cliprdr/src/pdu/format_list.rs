@@ -361,7 +361,7 @@ impl FormatList<'_> {
 
             let mut formats = Vec::with_capacity(16);
 
-            while src.len() >= minimal_format_size {
+            while minimal_format_size <= src.len() {
                 if formats.len() == MAX_FORMAT_COUNT {
                     return Err(decode_err!(too_many_formats(&src)));
                 }
@@ -378,7 +378,7 @@ impl FormatList<'_> {
         } else {
             let items_count = src.len() / Self::SHORT_FORMAT_SIZE;
 
-            if items_count > MAX_FORMAT_COUNT {
+            if MAX_FORMAT_COUNT < items_count {
                 return Err(decode_err!(too_many_formats(&src)));
             }
 
@@ -427,7 +427,7 @@ fn read_format_name(src: &mut ReadCursor<'_>, charset: CharacterSet) -> DecodeRe
         ),
     };
 
-    if !terminated && characters_left > MAX_FORMAT_NAME_LENGTH {
+    if !terminated && MAX_FORMAT_NAME_LENGTH < characters_left {
         return Err(invalid_field_err!(
             FormatList::NAME,
             "wszFormatName",
