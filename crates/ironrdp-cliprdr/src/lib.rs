@@ -701,17 +701,18 @@ impl<R: Role> Cliprdr<R> {
     }
 
     fn handle_format_list_response(&mut self, response: FormatListResponse) -> PduResult<Vec<SvcMessage>> {
+        // [MS-RDPECLIP] 1.3.2.1 - Initialization Sequence: its last step is the server's Format List Response.
+        // On a failure, 3.1.5.2.4 asks only that later Format Data and File Contents Requests be answered with
+        // failure, so a client whose first Format List is refused still takes the server's copies.
+        if !R::is_server() && self.state == CliprdrState::Initialization {
+            debug!("Clipboard virtual channel initialized");
+            self.state = CliprdrState::Ready;
+            self.backend.on_ready();
+        }
+
         match response {
             FormatListResponse::Ok => {
-                if !R::is_server() {
-                    if self.state == CliprdrState::Initialization {
-                        debug!("Clipboard virtual channel initialized");
-                        self.state = CliprdrState::Ready;
-                        self.backend.on_ready();
-                    } else {
-                        trace!("Remote accepted format list");
-                    }
-                }
+                trace!("Remote accepted format list");
                 self.backend.on_format_list_response(true);
             }
             FormatListResponse::Fail => {
