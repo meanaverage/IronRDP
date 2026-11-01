@@ -1325,18 +1325,34 @@ impl DeviceAnnounceHeader {
     }
 
     fn new_drive(device_id: u32, name: String) -> Self {
+        // MS-RDPEFS 2.2.3.1 asks for the name in DeviceData as a Unicode string with DRIVE_CAPABILITY_VERSION_02,
+        // which this client advertises, but Windows 11 and Windows Server 2022 and 2025 read the field as 8-bit
+        // characters: a UTF-16 name shows as its first letter. FreeRDP's client writes the name as 8-bit characters too.
+        let device_data = {
+            let last = name.chars().count().checked_sub(1);
+            let mut out: Vec<u8> = name
+                .chars()
+                .enumerate()
+                .map(|(i, c)| match u8::try_from(c) {
+                    // Windows refuses an 8-bit name with a character MS-RDPEFS 2.2.1.3 forbids in a device name, or
+                    // a colon before its end; FreeRDP replaces them too.
+                    Ok(b'<' | b'>' | b'"' | b'/' | b'\\' | b'|') => b'_',
+                    Ok(b':') if Some(i) != last => b'_',
+                    Ok(b) if b.is_ascii() => b,
+                    // A character outside ASCII has no 8-bit form here.
+                    _ => b'_',
+                })
+                .collect();
+            out.push(0 /* NUL terminator */);
+            out
+        };
+
         Self {
             device_type: DeviceType::Filesystem,
             device_id,
-            // DeviceData carries the complete drive name, null-terminated, as 8-bit characters.
-            // MS-RDPEFS 2.2.3.1 asks for a Unicode string with DRIVE_CAPABILITY_VERSION_02, which this client
-            // advertises, but Windows reads the field as 8-bit characters: a UTF-16 name shows as its first letter.
-            // Windows 11 and Windows Server 2022 and 2025 do so.
-            // FreeRDP's client writes the name as 8-bit characters too.
-            // Characters outside ASCII become '_', as do the characters MS-RDPEFS 2.2.1.3 forbids in a device name.
             // PreferredDosName remains mandatory even though the server ignores it when DeviceDataLength is nonzero.
             preferred_dos_name: PreferredDosName::for_drive(&name),
-            device_data: ascii_with_nul(&name),
+            device_data,
         }
     }
 
@@ -1580,23 +1596,6 @@ impl DeviceAnnounceHeader {
     fn size(&self) -> usize {
         Self::FIXED_PART_SIZE + self.device_data.len()
     }
-}
-
-fn ascii_with_nul(s: &str) -> Vec<u8> {
-    let last = s.chars().count().checked_sub(1);
-    let mut out: Vec<u8> = s
-        .chars()
-        .enumerate()
-        .map(|(i, c)| match u8::try_from(c) {
-            // Windows refuses a drive whose name has a character MS-RDPEFS 2.2.1.3 forbids, or a colon before its end.
-            Ok(b'<' | b'>' | b'"' | b'/' | b'\\' | b'|') => b'_',
-            Ok(b':') if Some(i) != last => b'_',
-            Ok(b) if b.is_ascii() => b,
-            _ => b'_',
-        })
-        .collect();
-    out.push(0 /* NUL terminator */);
-    out
 }
 
 fn utf16le_with_nul(s: &str) -> Vec<u8> {
