@@ -15,7 +15,7 @@ use ironrdp_core::{AsAny, EncodeResult, IntoOwned as _};
 use ironrdp_svc::{SvcMessage, SvcProcessor};
 use rstest::rstest;
 
-use ironrdp_testsuite_core::clipboard::{TestBackend, init_ready_client_with_backend, real_now_ms};
+use ironrdp_testsuite_core::clipboard::{TestBackend, init_ready_client_with_backend};
 
 fn named(id: u32, name: &str) -> ClipboardFormat {
     ClipboardFormat::new(ClipboardFormatId::new(id)).with_name(ClipboardFormatName::new(name.to_owned()))
@@ -206,13 +206,6 @@ impl CliprdrBackend for RemoteCopies {
     fn on_file_contents_response(&mut self, _: FileContentsResponse<'_>) {}
     fn on_lock(&mut self, _: LockDataId) {}
     fn on_unlock(&mut self, _: LockDataId) {}
-
-    fn now_ms(&self) -> u64 {
-        real_now_ms()
-    }
-    fn elapsed_ms(&self, since: u64) -> u64 {
-        self.now_ms().saturating_sub(since)
-    }
 }
 
 impl AsAny for RemoteCopies {
