@@ -177,7 +177,7 @@ impl Sequence for LicenseExchangeSequence {
                             ) {
                                 Ok((client_license_info, encryption_data)) => {
                                     trace!(?encryption_data, "Successfully generated Client License Info");
-                                    trace!(message = ?client_license_info, "Send");
+                                    debug!(message = ?client_license_info, "Send");
 
                                     let written = encode_send_data_request::<LicensePdu>(
                                         send_data_indication_ctx.initiator_id,
@@ -208,7 +208,7 @@ impl Sequence for LicenseExchangeSequence {
                             ) {
                                 Ok((new_license_request, encryption_data)) => {
                                     trace!(?encryption_data, "Successfully generated Client New License Request");
-                                    trace!(message = ?new_license_request, "Send");
+                                    debug!(message = ?new_license_request, "Send");
 
                                     let written = encode_send_data_request::<LicensePdu>(
                                         send_data_indication_ctx.initiator_id,
