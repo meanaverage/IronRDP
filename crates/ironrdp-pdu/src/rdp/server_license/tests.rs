@@ -158,6 +158,7 @@ fn read_license_header_handles_valid_client_correctly() {
     );
 }
 
+// oracle: mutant a licensing type's Debug output printing withheld bytes or the user or machine name, or hiding the upgrade license's header, the product, the scope or the public exponent.
 #[test]
 fn debug_output_withholds_keying_material_and_licenses() {
     use client_platform_challenge_response::{ClientType, LicenseDetailLevel};
