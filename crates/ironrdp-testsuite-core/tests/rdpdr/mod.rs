@@ -423,6 +423,33 @@ fn filesystem_drive_announce_encodes_an_ascii_name_and_valid_dos_name() {
     assert_eq!(device_data, b"share _\0");
 }
 
+fn drive_device_data(drive_name: &str) -> Vec<u8> {
+    let mut rdpdr = Rdpdr::new(Box::new(NoopRdpdrBackend), "IronRDP".to_owned())
+        .with_drives(Some(vec![(42, drive_name.to_owned())]));
+    let client_id = announce_client_id(&mut rdpdr, 12);
+    assert!(
+        rdpdr
+            .process(&encoded_server_client_id_confirm(client_id))
+            .unwrap()
+            .is_empty()
+    );
+    let responses = rdpdr.process(&encode_vec(&RdpdrPdu::UserLoggedon).unwrap()).unwrap();
+    assert_eq!(responses.len(), 1);
+
+    let encoded = responses[0].encode_unframed_pdu().unwrap();
+    let device_data_length = read_u32_as_usize(&encoded[24..]);
+    encoded[28..28 + device_data_length].to_vec()
+}
+
+#[test]
+fn filesystem_drive_announce_replaces_characters_a_device_name_may_not_contain() {
+    // oracle: spec MS-RDPEFS §2.2.1.3 and reference FreeRDP/FreeRDP@dae0390a42ab271fa07a35979dfcd5671f83a949:channels/drive/client/drive_main.c -
+    // <, >, ", /, \, | and a colon before the end are invalid in a device name, and become '_'.
+    assert_eq!(drive_device_data(r#"a<b>c"d/e\f|g:h"#), b"a_b_c_d_e_f_g_h\0");
+    // oracle: spec MS-RDPEFS §2.2.1.3 - a colon is valid at the end of a device name.
+    assert_eq!(drive_device_data("C:"), b"C:\0");
+}
+
 #[test]
 fn server_announce_reopens_post_logon_drive_announcements() {
     let mut rdpdr =
