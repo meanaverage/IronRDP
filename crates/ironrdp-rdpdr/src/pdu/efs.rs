@@ -1139,6 +1139,11 @@ impl Devices {
         self.push(DeviceAnnounceHeader::new_smartcard(device_id));
     }
 
+    /// Announces a file system device the server shares under `name`, as `\\tsclient\<name>` on Windows.
+    ///
+    /// The name goes as 8-bit characters, null-terminated, as [`DeviceAnnounceHeader::device_data`] describes, so an
+    /// embedded NUL ends it early; callers that accept a configured name reject NUL first, as
+    /// [`crate::Rdpdr::add_dynamic_drive`] does.
     pub fn add_drive(&mut self, device_id: u32, name: String) {
         self.push(DeviceAnnounceHeader::new_drive(device_id, name));
     }
@@ -1558,8 +1563,14 @@ impl DeviceAnnounceHeader {
         &self.preferred_dos_name.0
     }
 
-    /// Device-type-specific announce data (e.g. the null-terminated 8-bit drive
-    /// name for [`DeviceType::Filesystem`]); opaque to this crate.
+    /// Device-type-specific announce data, which this crate does not decode.
+    ///
+    /// For [`DeviceType::Filesystem`], the full drive name, null-terminated, as 8-bit characters.
+    /// [2.2.3.1] Client Device List Announce (DR_DEVICELIST_ANNOUNCE) asks for a null-terminated Unicode string, but
+    /// Windows reads the field as 8-bit characters, so a UTF-16 name shows as its first letter.
+    /// Characters outside ASCII, and those a device name may not contain, become `_`.
+    ///
+    /// [2.2.3.1]: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpefs/d8b2bc1c-0207-4c15-abe3-62eaa2afcaf1
     pub fn device_data(&self) -> &[u8] {
         &self.device_data
     }
