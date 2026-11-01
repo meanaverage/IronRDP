@@ -1332,18 +1332,17 @@ impl DeviceAnnounceHeader {
         // which this client advertises, but Windows 11 and Windows Server 2022 and 2025 read the field as 8-bit
         // characters: a UTF-16 name shows as its first letter. FreeRDP's client writes the name as 8-bit characters too.
         let device_data = {
-            let last = name.chars().count().checked_sub(1);
+            let char_count = name.chars().count();
             let mut out: Vec<u8> = name
                 .chars()
                 .enumerate()
-                .map(|(i, c)| match u8::try_from(c) {
+                .map(|(i, c)| match c {
                     // Windows refuses an 8-bit name with a character MS-RDPEFS 2.2.1.3 forbids in a device name, or
                     // a colon before its end; FreeRDP replaces them too. A NUL would end the name early.
-                    Ok(b'<' | b'>' | b'"' | b'/' | b'\\' | b'|' | 0) => b'_',
-                    Ok(b':') if Some(i) != last => b'_',
-                    Ok(b) if b.is_ascii() => b,
+                    '<' | '>' | '"' | '/' | '\\' | '|' | '\0' => b'_',
+                    ':' if i + 1 != char_count => b'_',
                     // A character outside ASCII has no 8-bit form here.
-                    _ => b'_',
+                    _ => u8::try_from(c).ok().filter(u8::is_ascii).unwrap_or(b'_'),
                 })
                 .collect();
             out.push(0 /* NUL terminator */);
