@@ -414,3 +414,42 @@ fn refuses_format_data_requests_while_its_format_list_stands_refused() {
     assert!(answer.is_empty());
     assert_eq!(*requests.lock().unwrap(), [ClipboardFormatId::CF_UNICODETEXT]);
 }
+
+#[test]
+fn refuses_a_server_copy_over_the_limit_before_the_server_answers_the_first_format_list() {
+    let mut server = CliprdrServer::new(Box::new(TestBackend));
+    let backend = RemoteCopies::default();
+    let copies = Arc::clone(&backend.copies);
+    let mut client = CliprdrClient::new(Box::new(backend));
+
+    // Capabilities and Monitor Ready, then the client's first copy, not yet delivered to the server.
+    deliver(&mut client, server.start().unwrap());
+    let first_copy = client
+        .initiate_copy(&[unnamed(ClipboardFormatId::CF_UNICODETEXT)])
+        .unwrap();
+
+    // The server copies more formats than the client takes before that copy reaches it.
+    let refusal = deliver(
+        &mut client,
+        server
+            .initiate_copy(&vec![unnamed(ClipboardFormatId::CF_DIB); MAX_FORMAT_COUNT + 1])
+            .unwrap(),
+    );
+    // oracle: spec MS-RDPECLIP §2.2.3.2 - a Format List that isn't processed is answered with CB_RESPONSE_FAIL.
+    assert_eq!(format_list_responses(&refusal), [FormatListResponse::Fail]);
+    // oracle: mutant the backend not told that the remote clipboard holds nothing it can take
+    assert_eq!(*copies.lock().unwrap(), [Vec::<ClipboardFormat>::new()]);
+    // oracle: mutant the client Ready once it refuses the server's list in Initialization
+    assert!(!client.is_ready());
+    deliver(&mut server, refusal);
+
+    // The server's answer to the client's first copy completes initialization, and the server's next copy is taken.
+    let answer = deliver(&mut server, first_copy);
+    assert_eq!(format_list_responses(&answer), [FormatListResponse::Ok]);
+    deliver(&mut client, answer);
+    assert!(client.is_ready());
+    let list = [unnamed(ClipboardFormatId::CF_UNICODETEXT)];
+    let answer = deliver(&mut client, server.initiate_copy(&list).unwrap());
+    assert_eq!(format_list_responses(&answer), [FormatListResponse::Ok]);
+    assert_eq!(copies.lock().unwrap().last().unwrap(), &list);
+}
