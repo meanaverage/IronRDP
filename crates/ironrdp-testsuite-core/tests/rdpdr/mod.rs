@@ -441,9 +441,8 @@ fn filesystem_drive_announce_replaces_characters_a_device_name_may_not_contain()
 
 #[test]
 fn filesystem_drive_announce_keeps_a_trailing_colon() {
-    // oracle: reference Windows 11 build 26300, Windows Server 2022 build 20348 and Windows Server 2025 build 26100
-    // accept an 8-bit name ending in a colon and show a drive announced as C: as \\tsclient\C, as recorded in
-    // Devolutions/IronRDP#2342.
+    // oracle: mutant the trailing colon replaced with '_', which Windows shows as `\\tsclient\C_` rather than
+    // `\\tsclient\C`.
     assert_eq!(drive_device_data(&encoded_drive_announce("C:")), b"C:\0");
 }
 
