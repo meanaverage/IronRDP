@@ -1141,9 +1141,7 @@ impl Devices {
 
     /// Announces a file system device the server shares under `name`, as `\\tsclient\<name>` on Windows.
     ///
-    /// The name goes as 8-bit characters, null-terminated, as [`DeviceAnnounceHeader::device_data`] describes, so an
-    /// embedded NUL ends it early; callers that accept a configured name reject NUL first, as
-    /// [`crate::Rdpdr::add_dynamic_drive`] does.
+    /// The name goes as 8-bit characters, null-terminated, as [`DeviceAnnounceHeader::device_data`] describes.
     pub fn add_drive(&mut self, device_id: u32, name: String) {
         self.push(DeviceAnnounceHeader::new_drive(device_id, name));
     }
@@ -1340,8 +1338,8 @@ impl DeviceAnnounceHeader {
                 .enumerate()
                 .map(|(i, c)| match u8::try_from(c) {
                     // Windows refuses an 8-bit name with a character MS-RDPEFS 2.2.1.3 forbids in a device name, or
-                    // a colon before its end; FreeRDP replaces them too.
-                    Ok(b'<' | b'>' | b'"' | b'/' | b'\\' | b'|') => b'_',
+                    // a colon before its end; FreeRDP replaces them too. A NUL would end the name early.
+                    Ok(b'<' | b'>' | b'"' | b'/' | b'\\' | b'|' | 0) => b'_',
                     Ok(b':') if Some(i) != last => b'_',
                     Ok(b) if b.is_ascii() => b,
                     // A character outside ASCII has no 8-bit form here.
@@ -1568,7 +1566,7 @@ impl DeviceAnnounceHeader {
     /// For [`DeviceType::Filesystem`], the full drive name, null-terminated, as 8-bit characters.
     /// [2.2.3.1] Client Device List Announce (DR_DEVICELIST_ANNOUNCE) asks for a null-terminated Unicode string, but
     /// Windows reads the field as 8-bit characters, so a UTF-16 name shows as its first letter.
-    /// Characters outside ASCII, and those a device name may not contain, become `_`.
+    /// Characters outside ASCII, a NUL, and the characters a device name may not contain become `_`.
     ///
     /// [2.2.3.1]: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpefs/d8b2bc1c-0207-4c15-abe3-62eaa2afcaf1
     pub fn device_data(&self) -> &[u8] {

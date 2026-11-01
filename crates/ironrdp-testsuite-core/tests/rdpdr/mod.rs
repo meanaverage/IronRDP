@@ -448,6 +448,17 @@ fn filesystem_drive_announce_keeps_a_trailing_colon() {
 }
 
 #[test]
+fn filesystem_drive_announce_replaces_an_embedded_nul() {
+    let encoded = encoded_drive_announce("a\0b");
+    let device_data = drive_device_data(&encoded);
+    // oracle: spec MS-RDPEFS §2.2.3.1 - the name in DeviceData is null-terminated, so a NUL inside it would end it
+    // early.
+    assert!(!device_data[..device_data.len() - 1].contains(&0));
+    // oracle: mutant the NUL dropped instead of replaced.
+    assert_eq!(device_data, b"a_b\0");
+}
+
+#[test]
 fn server_announce_reopens_post_logon_drive_announcements() {
     let mut rdpdr =
         Rdpdr::new(Box::new(NoopRdpdrBackend), "IronRDP".to_owned()).with_drives(Some(vec![(42, "share".to_owned())]));
