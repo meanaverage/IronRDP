@@ -277,17 +277,28 @@ fn encode(list: &[ClipboardFormat]) -> Vec<u8> {
     ironrdp_core::encode_vec(&ClipboardPdu::FormatList(FormatList::new_unicode(list, true).unwrap())).unwrap()
 }
 
+// oracle: regression #2091 - a list of duplicate CF_DIB entries past the limit is refused, not handed to the backend.
+#[test]
+fn refuses_a_list_of_duplicate_formats_past_the_limit() {
+    let (mut cliprdr, copies) = ready_client();
+
+    // Repeated supported formats, with long format names negotiated, as the issue's server sent them.
+    let list = vec![unnamed(ClipboardFormatId::CF_DIB); MAX_FORMAT_COUNT + 1];
+
+    assert_eq!(process(&mut cliprdr, &encode(&list)), [FormatListResponse::Fail]);
+    // None of them reaches the backend, whose selection scanned the whole list for each entry.
+    assert!(copies.lock().unwrap().iter().all(Vec::is_empty));
+}
+
 #[test]
 fn answers_a_format_list_over_the_limit_with_a_failure_and_goes_on() {
     let (mut cliprdr, copies) = ready_client();
 
-    // Repeated supported formats are rejected before reaching backend selection.
     let responses = process(
         &mut cliprdr,
-        &encode(&vec![unnamed(ClipboardFormatId::CF_DIB); MAX_FORMAT_COUNT + 1]),
+        &encode(&vec![unnamed(ClipboardFormatId::CF_UNICODETEXT); MAX_FORMAT_COUNT + 1]),
     );
 
-    // oracle: regression #2091 - a list of duplicate CF_DIB entries past the limit is refused, and the channel goes on.
     // oracle: spec MS-RDPECLIP §2.2.3.2 - a Format List that isn't processed is answered with CB_RESPONSE_FAIL.
     assert_eq!(responses, [FormatListResponse::Fail]);
     // The remote clipboard changed to nothing the client can take.
