@@ -11,8 +11,9 @@ use ironrdp_cliprdr::pdu::{
     LockDataId, MAX_FORMAT_COUNT, MAX_FORMAT_NAME_LENGTH,
 };
 use ironrdp_cliprdr::{CliprdrClient, CliprdrServer};
-use ironrdp_core::AsAny;
+use ironrdp_core::{AsAny, EncodeResult};
 use ironrdp_svc::{SvcMessage, SvcProcessor};
+use rstest::rstest;
 
 use ironrdp_testsuite_core::clipboard::{TestBackend, init_ready_client_with_backend, real_now_ms};
 
@@ -23,6 +24,9 @@ fn named(id: u32, name: &str) -> ClipboardFormat {
 fn unnamed(id: ClipboardFormatId) -> ClipboardFormat {
     ClipboardFormat::new(id)
 }
+
+/// Encodes formats into a Format List, as [`FormatList::new_unicode`] and [`FormatList::new_ascii`] do.
+type Encoder = fn(&[ClipboardFormat], bool) -> EncodeResult<FormatList<'static>>;
 
 /// msgFlags of a Format List PDU with Unicode names.
 const UNICODE_NAMES: u16 = 0;
@@ -46,26 +50,30 @@ fn decode_long_names(pdu: &[u8]) -> Result<Vec<ClipboardFormat>, ironrdp_pdu::Pd
 }
 
 // oracle: property round-trip - a list at the limits decodes to the formats it was encoded from.
-#[test]
-fn takes_a_format_list_at_the_limits() {
+#[rstest]
+#[case::unicode(FormatList::new_unicode)]
+#[case::ansi(FormatList::new_ascii)]
+fn takes_a_format_list_at_the_limits(#[case] encode: Encoder) {
     let name = "n".repeat(MAX_FORMAT_NAME_LENGTH);
     let list = vec![named(0xC001, &name); MAX_FORMAT_COUNT];
 
-    for encoded in [
-        FormatList::new_unicode(&list, true).unwrap(),
-        FormatList::new_ascii(&list, true).unwrap(),
-    ] {
-        let formats = encoded.get_formats(true).unwrap();
-        assert_eq!(formats.len(), MAX_FORMAT_COUNT);
-        assert!(formats.iter().all(|format| format == &list[0]));
-    }
+    let formats = encode(&list, true).unwrap().get_formats(true).unwrap();
 
+    assert_eq!(formats.len(), MAX_FORMAT_COUNT);
+    assert!(formats.iter().all(|format| format == &list[0]));
+}
+
+// oracle: property round-trip - a list of short format names at the limit decodes to the formats it was encoded from.
+#[test]
+fn takes_a_short_format_list_at_the_limit() {
     // Short format names: 32 bytes each.
     let list = vec![unnamed(ClipboardFormatId::CF_UNICODETEXT); MAX_FORMAT_COUNT];
+
     let formats = FormatList::new_unicode(&list, false)
         .unwrap()
         .get_formats(false)
         .unwrap();
+
     assert_eq!(formats, list);
 }
 
@@ -91,37 +99,36 @@ fn counts_empty_ansi_names_at_the_limit() {
 }
 
 // oracle: mutant an off-by-one in MAX_FORMAT_COUNT
-#[test]
-fn refuses_more_formats_than_the_limit() {
+#[rstest]
+#[case::unicode_long_names(FormatList::new_unicode, true)]
+#[case::ansi_long_names(FormatList::new_ascii, true)]
+#[case::unicode_short_names(FormatList::new_unicode, false)]
+fn refuses_more_formats_than_the_limit(#[case] encode: Encoder, #[case] long_names: bool) {
     let list = vec![named(0xC001, "PNG"); MAX_FORMAT_COUNT + 1];
 
-    assert!(FormatList::new_unicode(&list, true).unwrap().get_formats(true).is_err());
-    assert!(FormatList::new_ascii(&list, true).unwrap().get_formats(true).is_err());
-    assert!(
-        FormatList::new_unicode(&list, false)
-            .unwrap()
-            .get_formats(false)
-            .is_err()
-    );
+    assert!(encode(&list, long_names).unwrap().get_formats(long_names).is_err());
 }
 
 // oracle: mutant an off-by-one in MAX_FORMAT_NAME_LENGTH
-#[test]
-fn refuses_a_format_name_longer_than_the_limit() {
+#[rstest]
+#[case::unicode(FormatList::new_unicode)]
+#[case::ansi(FormatList::new_ascii)]
+fn refuses_a_format_name_longer_than_the_limit(#[case] encode: Encoder) {
     let list = [named(0xC001, &"n".repeat(MAX_FORMAT_NAME_LENGTH + 1))];
 
-    assert!(FormatList::new_unicode(&list, true).unwrap().get_formats(true).is_err());
-    assert!(FormatList::new_ascii(&list, true).unwrap().get_formats(true).is_err());
+    assert!(encode(&list, true).unwrap().get_formats(true).is_err());
 }
 
 // oracle: mutant an off-by-one in MAX_FORMAT_NAME_LENGTH, or a name without a terminator taken at any length
-#[test]
-fn refuses_an_unterminated_name_longer_than_the_limit() {
+#[rstest]
+#[case::unicode(UNICODE_NAMES, b"n\0")]
+#[case::ansi(ASCII_NAMES, b"n")]
+fn refuses_an_unterminated_name_longer_than_the_limit(#[case] flags: u16, #[case] character: &[u8]) {
     // One format whose name runs past the limit without a terminator.
     let mut body = 0xC001u32.to_le_bytes().to_vec();
-    body.extend(core::iter::repeat_n([b'n', 0], MAX_FORMAT_NAME_LENGTH + 1).flatten());
+    body.extend(core::iter::repeat_n(character, MAX_FORMAT_NAME_LENGTH + 1).flatten());
 
-    assert!(decode_long_names(&format_list_pdu(UNICODE_NAMES, &body)).is_err());
+    assert!(decode_long_names(&format_list_pdu(flags, &body)).is_err());
 }
 
 // oracle: mutant a name that ends with the PDU refused or cut short
@@ -137,33 +144,17 @@ fn takes_an_unterminated_name_within_the_limit() {
     );
 }
 
-// oracle: mutant an off-by-one in MAX_FORMAT_NAME_LENGTH for ANSI names, or one without a terminator taken at any
-// length
-#[test]
-fn refuses_an_unterminated_ansi_name_longer_than_the_limit() {
-    let mut body = 0xC001u32.to_le_bytes().to_vec();
-    body.extend(core::iter::repeat_n(b'n', MAX_FORMAT_NAME_LENGTH + 1));
-
-    assert!(decode_long_names(&format_list_pdu(ASCII_NAMES, &body)).is_err());
-}
-
 // oracle: mutant an off-by-one in MAX_FORMAT_NAME_LENGTH for a name without a terminator
-#[test]
-fn takes_an_unterminated_name_of_the_limit_s_length() {
-    let name = "n".repeat(MAX_FORMAT_NAME_LENGTH);
+#[rstest]
+#[case::unicode(UNICODE_NAMES, b"n\0")]
+#[case::ansi(ASCII_NAMES, b"n")]
+fn takes_an_unterminated_name_of_the_limit_s_length(#[case] flags: u16, #[case] character: &[u8]) {
+    let mut body = 0xC001u32.to_le_bytes().to_vec();
+    body.extend(core::iter::repeat_n(character, MAX_FORMAT_NAME_LENGTH).flatten());
 
-    let mut unicode = 0xC001u32.to_le_bytes().to_vec();
-    unicode.extend(core::iter::repeat_n([b'n', 0], MAX_FORMAT_NAME_LENGTH).flatten());
     assert_eq!(
-        decode_long_names(&format_list_pdu(UNICODE_NAMES, &unicode)).unwrap(),
-        [named(0xC001, &name)]
-    );
-
-    let mut ansi = 0xC001u32.to_le_bytes().to_vec();
-    ansi.extend(core::iter::repeat_n(b'n', MAX_FORMAT_NAME_LENGTH));
-    assert_eq!(
-        decode_long_names(&format_list_pdu(ASCII_NAMES, &ansi)).unwrap(),
-        [named(0xC001, &name)]
+        decode_long_names(&format_list_pdu(flags, &body)).unwrap(),
+        [named(0xC001, &"n".repeat(MAX_FORMAT_NAME_LENGTH))]
     );
 }
 
@@ -290,7 +281,7 @@ fn answers_a_format_name_over_the_limit_with_a_failure() {
 }
 
 #[test]
-fn answers_a_format_list_it_cannot_decode_with_a_failure() {
+fn answers_a_format_list_whose_names_it_cannot_decode_with_a_failure() {
     let (mut cliprdr, copies) = ready_client();
 
     // A name with an unpaired surrogate.
@@ -325,7 +316,7 @@ fn takes_a_server_copy_after_the_server_refuses_the_first_format_list() {
 
     // The server copies, and the client pastes it.
     // oracle: spec MS-RDPECLIP §1.3.2.1 - the Initialization Sequence's last step is the server's Format List Response,
-    // and on a failure §3.1.5.2.4 asks only that later data requests be answered with failure.
+    // which §3.1.5.2.3 lets refuse the list.
     let answer = deliver(
         &mut client,
         server
