@@ -14,7 +14,7 @@ use sha1::Digest as _;
 use super::{
     BasicSecurityHeader, BasicSecurityHeaderFlags, BlobHeader, BlobType, KEY_EXCHANGE_ALGORITHM_RSA,
     LicenseEncryptionData, LicenseHeader, PREAMBLE_SIZE, PreambleFlags, PreambleType, PreambleVersion,
-    RANDOM_NUMBER_SIZE, ServerLicenseError, ServerLicenseRequest, UTF8_NULL_TERMINATOR_SIZE, Withheld, WithheldText,
+    RANDOM_NUMBER_SIZE, ServerLicenseError, ServerLicenseRequest, UTF8_NULL_TERMINATOR_SIZE, Withheld,
 };
 use crate::crypto::rsa::encrypt_with_public_key;
 use crate::utils::{self, CharacterSet};
@@ -267,8 +267,8 @@ impl fmt::Debug for ClientNewLicenseRequest {
                 "encrypted_premaster_secret",
                 &Withheld(&self.encrypted_premaster_secret),
             )
-            .field("client_username", &WithheldText(&self.client_username))
-            .field("client_machine_name", &WithheldText(&self.client_machine_name))
+            .field("client_username", &Withheld(self.client_username.as_bytes()))
+            .field("client_machine_name", &Withheld(self.client_machine_name.as_bytes()))
             .finish()
     }
 }

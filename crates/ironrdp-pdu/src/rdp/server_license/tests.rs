@@ -297,7 +297,7 @@ fn debug_output_withholds_keying_material_and_licenses() {
         printed[1]
     );
     assert!(
-        printed[1].contains("client_username: <7 characters withheld>"),
+        printed[1].contains("client_username: <7 bytes withheld>"),
         "{}",
         printed[1]
     );

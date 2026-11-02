@@ -26,22 +26,18 @@ mod server_license_request;
 mod server_platform_challenge;
 mod server_upgrade_license;
 
-/// Bytes that stay out of `Debug` output: keying material, encrypted blobs and the license itself are shown as their
-/// length only, so that a log at any level can be handed over.
+/// Bytes that stay out of `Debug` output, shown as their length only.
+///
+/// Keying material, encrypted blobs, the license itself and the user and machine names stay out so that a log at any
+/// level can be handed over.
+/// The server certificate's chain, modulus and signature are public, but a derived `Debug` would print their
+/// kilobytes as a decimal list and bury the rest of the exchange; their lengths, which tell the key size and the
+/// chain's shape, stay.
 pub(crate) struct Withheld<'a>(pub(crate) &'a [u8]);
 
 impl fmt::Debug for Withheld<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<{} bytes withheld>", self.0.len())
-    }
-}
-
-/// Text that stays out of `Debug` output (a user or machine name), shown as its length only.
-pub(crate) struct WithheldText<'a>(pub(crate) &'a str);
-
-impl fmt::Debug for WithheldText<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<{} characters withheld>", self.0.chars().count())
     }
 }
 
