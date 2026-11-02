@@ -256,17 +256,21 @@ impl<'de> Decode<'de> for RsaPublicKey {
     }
 }
 
+/// Certificates that stay out of `Debug` output, each shown as its length only.
+struct WithheldList<'a>(&'a [Vec<u8>]);
+
+impl fmt::Debug for WithheldList<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list()
+            .entries(self.0.iter().map(|item| Withheld(item)))
+            .finish()
+    }
+}
+
 impl fmt::Debug for X509CertificateChain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("X509CertificateChain")
-            .field(
-                "certificate_array",
-                &self
-                    .certificate_array
-                    .iter()
-                    .map(|item| Withheld(item))
-                    .collect::<Vec<_>>(),
-            )
+            .field("certificate_array", &WithheldList(&self.certificate_array))
             .finish()
     }
 }
